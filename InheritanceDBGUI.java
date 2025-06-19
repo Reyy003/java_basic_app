@@ -72,6 +72,7 @@ public class InheritanceDBGUI {
         dataTable = new JTable(tableModel);
         rowSorter = new TableRowSorter<>(tableModel);
         dataTable.setRowSorter(rowSorter);
+        rowSorter.toggleSortOrder(1); // Urutkan berdasarkan nama
 
         JScrollPane tableScroll = new JScrollPane(dataTable);
         tableScroll.setBorder(BorderFactory.createTitledBorder("Data:"));
@@ -103,69 +104,66 @@ public class InheritanceDBGUI {
         frame.add(centerPanel, BorderLayout.CENTER);
     }
 
-private void tambahData() {
-    String name = nameField.getText().trim();
-    String ageText = ageField.getText().trim();
-    String address = addressField.getText().trim();
-    String idVal = idField.getText().trim();
-    String type = (String) typeBox.getSelectedItem();
+    private void tambahData() {
+        String name = nameField.getText().trim();
+        String ageText = ageField.getText().trim();
+        String address = addressField.getText().trim();
+        String idVal = idField.getText().trim();
+        String type = (String) typeBox.getSelectedItem();
 
-    if (name.isEmpty() || ageText.isEmpty() || address.isEmpty() || idVal.isEmpty()) {
-        JOptionPane.showMessageDialog(frame, "Semua field harus diisi.");
-        return;
-    }
-
-    try {
-        int age = Integer.parseInt(ageText);
-        Person person = type.equals("Mahasiswa") ? new Student(name, age, address, idVal)
-                                                 : new Lecturer(name, age, address, idVal);
-
-        Connection conn = connectDB();
-
-        // 🔍 CEK DUPLIKAT NIM/NIP
-        String checkQuery = type.equals("Mahasiswa")
-                ? "SELECT COUNT(*) FROM student WHERE nim = ?"
-                : "SELECT COUNT(*) FROM lecturer WHERE nip = ?";
-        PreparedStatement checkStmt = conn.prepareStatement(checkQuery);
-        checkStmt.setString(1, idVal);
-        ResultSet checkRs = checkStmt.executeQuery();
-        if (checkRs.next() && checkRs.getInt(1) > 0) {
-            JOptionPane.showMessageDialog(frame, type + " dengan NIM/NIP tersebut sudah ada!", "Data Duplikat", JOptionPane.WARNING_MESSAGE);
+        if (name.isEmpty() || ageText.isEmpty() || address.isEmpty() || idVal.isEmpty()) {
+            JOptionPane.showMessageDialog(frame, "Semua field harus diisi.");
             return;
         }
 
-        // 🔽 SIMPAN KE PERSON
-        String insertPerson = "INSERT INTO person (name, age, address, type) VALUES (?, ?, ?, ?)";
-        PreparedStatement ps = conn.prepareStatement(insertPerson, Statement.RETURN_GENERATED_KEYS);
-        ps.setString(1, person.getName());
-        ps.setInt(2, person.getAge());
-        ps.setString(3, person.getAddress());
-        ps.setString(4, person.getType());
-        ps.executeUpdate();
+        try {
+            int age = Integer.parseInt(ageText);
+            Person person = type.equals("Mahasiswa") ? new Student(name, age, address, idVal)
+                                                     : new Lecturer(name, age, address, idVal);
 
-        ResultSet rs = ps.getGeneratedKeys();
-        if (rs.next()) {
-            int personId = rs.getInt(1);
-            String insertChild = person instanceof Student ?
-                    "INSERT INTO student (person_id, nim) VALUES (?, ?)" :
-                    "INSERT INTO lecturer (person_id, nip) VALUES (?, ?)";
+            Connection conn = connectDB();
 
-            PreparedStatement psChild = conn.prepareStatement(insertChild);
-            psChild.setInt(1, personId);
-            psChild.setString(2, person.getId());
-            psChild.executeUpdate();
+            String checkQuery = type.equals("Mahasiswa")
+                    ? "SELECT COUNT(*) FROM student WHERE nim = ?"
+                    : "SELECT COUNT(*) FROM lecturer WHERE nip = ?";
+            PreparedStatement checkStmt = conn.prepareStatement(checkQuery);
+            checkStmt.setString(1, idVal);
+            ResultSet checkRs = checkStmt.executeQuery();
+            if (checkRs.next() && checkRs.getInt(1) > 0) {
+                JOptionPane.showMessageDialog(frame, type + " dengan NIM/NIP tersebut sudah ada!", "Data Duplikat", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            String insertPerson = "INSERT INTO person (name, age, address, type) VALUES (?, ?, ?, ?)";
+            PreparedStatement ps = conn.prepareStatement(insertPerson, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, person.getName());
+            ps.setInt(2, person.getAge());
+            ps.setString(3, person.getAddress());
+            ps.setString(4, person.getType());
+            ps.executeUpdate();
+
+            ResultSet rs = ps.getGeneratedKeys();
+            if (rs.next()) {
+                int personId = rs.getInt(1);
+                String insertChild = person instanceof Student ?
+                        "INSERT INTO student (person_id, nim) VALUES (?, ?)" :
+                        "INSERT INTO lecturer (person_id, nip) VALUES (?, ?)";
+
+                PreparedStatement psChild = conn.prepareStatement(insertChild);
+                psChild.setInt(1, personId);
+                psChild.setString(2, person.getId());
+                psChild.executeUpdate();
+            }
+
+            displayArea.append(person.getType() + ": " + person.getName() + " berhasil disimpan.\n");
+            nameField.setText(""); ageField.setText(""); addressField.setText(""); idField.setText("");
+            tampilkanData();
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(frame, "Usia harus berupa angka.");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(frame, "Error: " + e.getMessage());
         }
-
-        displayArea.append(person.getType() + ": " + person.getName() + " berhasil disimpan.\n");
-        nameField.setText(""); ageField.setText(""); addressField.setText(""); idField.setText("");
-        tampilkanData();
-    } catch (NumberFormatException e) {
-        JOptionPane.showMessageDialog(frame, "Usia harus berupa angka.");
-    } catch (Exception e) {
-        JOptionPane.showMessageDialog(frame, "Error: " + e.getMessage());
     }
-}
-
 
     private void tampilkanData() {
         tableModel.setRowCount(0);
